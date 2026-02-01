@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pencarian Data Santri</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .search-box {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: #764ba2;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            display: none;
+        }
+
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 5px solid white;
+            object-fit: cover;
+            margin: 0 auto;
+            display: block;
+            background: white;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .santri-name {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .detail-item {
+            margin: 12px 0;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            color: #555;
+            flex-grow: 1;
+        }
+
+        .no-results {
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            margin-top: 50px;
+            display: none;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .results {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-item {
+                flex-direction: column;
+            }
+
+            .detail-label {
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕌 Pencarian Data Santri</h1>
+            <p>Cari informasi santri berdasarkan nama</p>
+        </div>
+
+        <div class="info-box">
+            ℹ️ Silakan isi konfigurasi di bagian JavaScript untuk menghubungkan dengan Google Sheets dan Google Drive Anda
+        </div>
+
+        <div class="search-box">
+            <input 
+                type="text" 
+                class="search-input" 
+                id="searchInput" 
+                placeholder="Ketik nama santri yang ingin dicari..."
+                autocomplete="off"
+            >
+        </div>
+
+        <div class="loading" id="loading">
+            Memuat data...
+        </div>
+
+        <div class="no-results" id="noResults">
+            Tidak ada data santri yang ditemukan
+        </div>
+
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        // ========== KONFIGURASI ==========
+        // Ganti dengan ID Google Sheet Anda
+        const SHEET_ID = 'PASTE_GOOGLE_SHEET_ID_DISINI';
+        
+        // Ganti dengan API Key Google Anda
+        const API_KEY = 'PASTE_GOOGLE_API_KEY_DISINI';
+        
+        // Nama sheet/tab di Google Sheets
+        const SHEET_NAME = 'Sheet1';
+        
+        // ID Folder Google Drive untuk foto santri
+        const DRIVE_FOLDER_ID = 'PASTE_GOOGLE_DRIVE_FOLDER_ID_DISINI';
+        
+        // =================================
+
+        let allData = [];
+        let searchTimeout;
+
+        // Fungsi untuk mendapatkan URL foto dari Google Drive
+        function getDriveImageUrl(fileName) {
+            // Format: https://drive.google.com/uc?export=view&id=FILE_ID
+            // Jika Anda menyimpan file ID di sheet, gunakan:
+            // return `https://drive.google.com/uc?export=view&id=${fileName}`;
+            
+            // Atau jika menggunakan nama file, Anda perlu mapping di sheet
+            return `https://drive.google.com/uc?export=view&id=${fileName}`;
+        }
+
+        // Fungsi untuk memuat data dari Google Sheets
+        async function loadData() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+
+            try {
+                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}?key=${API_KEY}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.values && data.values.length > 1) {
+                    // Asumsi baris pertama adalah header
+                    const headers = data.values[0];
+                    allData = data.values.slice(1).map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = row[index] || '';
+                        });
+                        return obj;
+                    });
+                    console.log('Data berhasil dimuat:', allData.length, 'santri');
+                } else {
+                    console.error('Tidak ada data di sheet');
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Gagal memuat data. Periksa konfigurasi SHEET_ID dan API_KEY');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Fungsi untuk membuat card santri
+        function createCard(santri) {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            // Ambil foto dari Google Drive (sesuaikan dengan nama kolom di sheet Anda)
+            const fotoId = santri['Foto ID'] || santri['foto_id'] || '';
+            const avatarUrl = fotoId ? getDriveImageUrl(fotoId) : 'https://via.placeholder.com/120?text=No+Photo';
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <img src="${avatarUrl}" alt="${santri.Nama || santri.nama}" class="avatar" 
+                         onerror="this.src='https://via.placeholder.com/120?text=No+Photo'">
+                </div>
+                <div class="card-body">
+                    <div class="santri-name">${santri.Nama || santri.nama || 'Nama tidak tersedia'}</div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Ayah Kandung:</span>
+                        <span class="detail-value">${santri['Nama Ayah'] || santri.ayah || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Alamat Asal:</span>
+                        <span class="detail-value">${santri.Alamat || santri.alamat || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">R. Photo:</span>
+                        <span class="detail-value">${santri['R Photo'] || santri.r_photo || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Waktu Photo:</span>
+                        <span class="detail-value">${santri['Waktu Photo'] || santri.waktu_photo || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Kloter Tampil:</span>
+                        <span class="detail-value">${santri['Kloter Tampil'] || santri.kloter || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Waktu Tampil:</span>
+                        <span class="detail-value">${santri['Waktu Tampil'] || santri.waktu_tampil || '-'}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Ruang Transit:</span>
+                        <span class="detail-value">${santri['Ruang Transit'] || santri.ruang_transit || '-'}</span>
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // Fungsi untuk menampilkan hasil pencarian
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const noResults = document.getElementById('noResults');
+
+            resultsDiv.innerHTML = '';
+
+            if (data.length === 0) {
+                noResults.style.display = 'block';
+                return;
+            }
+
+            noResults.style.display = 'none';
+            data.forEach(santri => {
+                resultsDiv.appendChild(createCard(santri));
+            });
+        }
+
+        // Fungsi pencarian
+        function searchSantri(query) {
+            if (!query.trim()) {
+                displayResults(allData);
+                return;
+            }
+
+            const searchTerm = query.toLowerCase();
+            const filtered = allData.filter(santri => {
+                const nama = (santri.Nama || santri.nama || '').toLowerCase();
+                const ayah = (santri['Nama Ayah'] || santri.ayah || '').toLowerCase();
+                return nama.includes(searchTerm) || ayah.includes(searchTerm);
+            });
+
+            displayResults(filtered);
+        }
+
+        // Event listener untuk input pencarian
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchSantri(e.target.value);
+            }, 300);
+        });
+
+        // Muat data saat halaman dimuat
+        window.addEventListener('load', () => {
+            loadData();
+        });
+    </script>
+</body>
+</html>
